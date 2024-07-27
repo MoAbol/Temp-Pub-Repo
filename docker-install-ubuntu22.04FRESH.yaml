@@ -1,0 +1,108 @@
+---
+- name: Docker Engine Installation Playbook (By Mo.Abolhasani)
+  hosts: localhost
+  become: true
+  tasks:
+    - name: System details
+      debug:
+        msg: "{{ ansible_facts['lsb']['release'] }}"
+
+    - name: Change netplan installer file - BUG!
+      ansible.builtin.file:
+        path: /etc/netplan/00-installer-config.yaml
+        mode: 600
+
+    - name: Remove NSs 0
+      command: netplan set network.ethernets.enp0s3.nameservers.addresses=NULL
+
+    - name: Add Q8-Q9 NS Addrs
+      command: netplan set network.ethernets.enp0s3.nameservers.addresses=[8.8.8.8,9.9.9.9]
+
+    - name: Set dhcp4-overrides
+      command: netplan set network.ethernets.enp0s3.dhcp4-overrides.use-dns=false
+
+    - name: restart systemd-networkd 0
+      service:
+        unit: systemd-networkd
+        state: restarted
+        enabled: yes
+
+    - name: Update - Upgrade existing PKSs
+      apt:
+        upgrade: yes
+        update_cache: true
+        cache_valid_time: 86400
+
+    - name: Install essential PKGs
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+          - openvswitch-switch-dpdk
+        state: latest
+
+    - name: Remove NSs 1
+      command: netplan set network.ethernets.enp0s3.nameservers.addresses=NULL
+
+    - name: Add SheCan NS Addrs
+      command: netplan set network.ethernets.enp0s3.nameservers.addresses=[178.22.122.100,185.51.200.2]
+
+    - name: restart systemd-networkd 1
+      service:
+        unit: systemd-networkd
+        state: restarted
+        enabled: yes
+
+    - name: Add Docker GPG apt key
+      apt_key:
+        state: present
+        url: https://download.docker.com/linux/ubuntu/gpg
+
+    - name: Add Docker Repository for Ubuntu 22.04
+      when: ansible_facts['lsb']['release'] == "22.04"
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu jammy stable
+        state: present
+
+    - name: Install Docker packages from official repos
+      apt:
+        pkg:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: latest
+        update-cache: yes
+
+    - name: Add user 'dockeruser'
+      user:
+        name: dockeruser
+        state: present
+        createhome: yes
+
+    - name: Add dockeruser to docker group (passwd dockeruser to change passwd)
+      ansible.builtin.user:
+        name: dockeruser
+        groups: docker
+        append: true
+
+    - name: Run newgrp docker
+      command: newgrp docker
+
+    - name: restart-enable docker
+      service:
+        unit: docker
+        state: restarted
+        enabled: yes
+
+    - name: restart-enable containerd
+      service:
+        unit: containerd
+        state: restarted
+        enabled: yes
